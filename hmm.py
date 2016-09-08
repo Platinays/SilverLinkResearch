@@ -112,7 +112,7 @@ if __name__ == '__main__':
             sample = utilities.read_data_from_db(cur, **arg_dict)
             sample = feature_gen.sample_around_peak(np.matrix(sample), 25, 25)
             sample = utilities.mat_to_g(sample).tolist()
-            sample = discretize(sample)
+            # sample = discretize(sample)
             print(sample)
             # if arg_dict["label_id"] <= 3:
             #     sample = sample[:-60]
@@ -129,41 +129,40 @@ if __name__ == '__main__':
 
     # Eight ADLs (i), five subjects each (j)
     for i in range(1, 9):
-        # test_lists.append([])
+        test_lists.append([])
         for j in range(1, 6):
             arg_dict2["label_id"] = i
             arg_dict2["subject_id"] = j
             sample = utilities.read_data_from_db(cur, **arg_dict2)
             sample = utilities.mat_to_g(sample).tolist()
-            sample = discretize(sample)
+            # sample = discretize(sample)
             if len(sample) != 0:
-                test_lists.append(sample)
+                test_lists[i-1].append(sample)
 
     # sample_lists = sample_lists[:-8]
     x = np.matrix(np.concatenate([f for f in sample_lists])).T
     l = [len(s) for s in sample_lists]
     # model = hmm.GaussianHMM(n_components=3, n_iter=100)
-    model = hmm.MultinomialHMM(n_components=3, n_iter=100, params="ste", init_params="ste")
+    model = hmm.GaussianHMM(n_components=3)
     # model.startprob_ = np.array([1, 0, 0])
     # model.transmat_ = np.array([[0.9, 0.1, 0.0],
     #                             [0.0, 0.9, 0.1],
     #                             [0.1, 0.0, 0.9]])
+    # model.emissionprob_ = np.array([[1/6,] * 6, [1/6,] * 6, [1/6, ] * 6])
     model.fit(x, l)
 
     models = []
-    # for i in range(len(test_lists)):
-    #     print("len {}: {}".format(i, len(test_lists[i])))
-    #     xs = np.matrix(np.concatenate([f for f in test_lists[i]])).T
-    #     ls = [len(s) for s in test_lists[i]]
-    #     ms = hmm.MultinomialHMM(n_components=3, n_iter=100, params="ste", init_params="ste")
-    #     a = np.matrix(test_lists[0][0]).T
-    #     ms.fit(np.matrix(a))
-    #     models.append(ms)
-    # model.emissionprob_ = np.array([[1/6,] * 6, [1/6,] * 6, [1/6, ] * 6])
+    for i in range(len(test_lists)):
+        print("len({}) = {}".format(i, len(test_lists[i])))
+        xs = np.matrix(np.concatenate([f for f in test_lists[i]])).T
+        ls = [len(s) for s in test_lists[i]]
+        ms = hmm.GaussianHMM(n_components=3)
+        # a = np.matrix(test_lists[0][0]).T
+        ms.fit(xs, ls)
+        models.append(ms)
 
     print("Converged:", model.monitor_.converged)
     print(model.transmat_)
-    print(model.emissionprob_)
     # exit(1)
 
     # r = []
