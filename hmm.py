@@ -151,14 +151,14 @@ if __name__ == '__main__':
     model.fit(x, l)
 
     models = []
-    for i in range(len(test_lists)):
-        print("len {}: {}".format(i, len(test_lists[i])))
-        xs = np.matrix(np.concatenate([f for f in test_lists[i]])).T
-        ls = [len(s) for s in test_lists[i]]
-        ms = hmm.MultinomialHMM(n_components=3, n_iter=100, params="ste", init_params="ste")
-        a = np.matrix(test_lists[0][0]).T
-        ms.fit(np.matrix(a))
-        models.append(ms)
+    # for i in range(len(test_lists)):
+    #     print("len {}: {}".format(i, len(test_lists[i])))
+    #     xs = np.matrix(np.concatenate([f for f in test_lists[i]])).T
+    #     ls = [len(s) for s in test_lists[i]]
+    #     ms = hmm.MultinomialHMM(n_components=3, n_iter=100, params="ste", init_params="ste")
+    #     a = np.matrix(test_lists[0][0]).T
+    #     ms.fit(np.matrix(a))
+    #     models.append(ms)
     # model.emissionprob_ = np.array([[1/6,] * 6, [1/6,] * 6, [1/6, ] * 6])
 
     print("Converged:", model.monitor_.converged)
