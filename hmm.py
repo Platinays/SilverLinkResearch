@@ -37,6 +37,30 @@ def model_samples_generator(sample_lists):
     return (x, l)
 
 
+def hmm_classifier(hmm_models, sample):
+    """
+
+    :param hmm_models: a list of hmm models
+    :param sample: a matrix consisting of a single sample
+    :return: an integer indicating the index of the hmm model with the highest probability
+    """
+    logprob = -1e9
+    index = -1
+    if not isinstance(sample, np.matrix):
+        sample_mat = np.matrix(sample).T
+    else:
+        sample_mat = sample
+
+    for i in range(len(hmm_models)):
+        model = hmm_models[i]
+        score = model.score(sample_mat)
+        if score > logprob:
+            logprob = score
+            index = i
+
+    return index
+
+
 def discretize(list):
     ret_list = []
     for element in list:
@@ -113,7 +137,7 @@ if __name__ == '__main__':
             sample = feature_gen.sample_around_peak(np.matrix(sample), 25, 25)
             sample = utilities.mat_to_g(sample).tolist()
             # sample = discretize(sample)
-            print(sample)
+            # print(sample)
             # if arg_dict["label_id"] <= 3:
             #     sample = sample[:-60]
             sample_lists.append(sample[start_indices[index]-2:])
@@ -150,6 +174,10 @@ if __name__ == '__main__':
     #                             [0.1, 0.0, 0.9]])
     # model.emissionprob_ = np.array([[1/6,] * 6, [1/6,] * 6, [1/6, ] * 6])
     model.fit(x, l)
+    print(model.transmat_)
+    print(model.means_)
+    print(model.covars_)
+    # exit(0)
 
     models = []
     for i in range(len(test_lists)):
@@ -161,8 +189,7 @@ if __name__ == '__main__':
         ms.fit(xs, ls)
         models.append(ms)
 
-    print("Converged:", model.monitor_.converged)
-    print(model.transmat_)
+    models.append(model)  # add the fall model to the models
     # exit(1)
 
     # r = []
@@ -177,37 +204,39 @@ if __name__ == '__main__':
     #
     # print(r2)
     # {
-    result = []
-    scores = []
-    max_scores = []
+
     # (x, l) = model_samples_generator(test_lists)
     # print(model.score(x, l))
 
-    for s in test_lists:
-        # print(s)
-        model_x = np.transpose(np.matrix(s))
-        result.append(model.predict(model_x))
-        scores.append(model.score(model_x))
-        max_scores.append(matching_degree(model, s))
-
-    for i in range(len(result)):
-        # print(scores[i])
-        print(result[i])
-        print(max_scores[i])
-
     result = []
-    scores = []
-    max_scores = []
+    # scores = []
+    # max_scores = []
 
     for s in sample_lists:
-        print(s)
-        model_x = np.transpose(np.matrix(s))
-        result.append(model.predict(model_x))
-        scores.append(model.score(model_x))
-        max_scores.append(matching_degree(model, s))
+        result.append(hmm_classifier(models, s))
 
-    for i in range(len(result)):
-        # print(scores[i])
-        print(result[i])
-        print(max_scores[i])
-    # }
+    print(result)
+
+    # for i in range(len(result)):
+    #     # print(scores[i])
+    #     print(result[i])
+    #     print(max_scores[i])
+    # # }
+    #
+    # result = []
+    # scores = []
+    # max_scores = []
+
+    result2 = []
+    for g in test_lists:
+        for s in g:
+        # print(s)
+            result2.append(hmm_classifier(models, s))
+
+    print(result2)
+    # for i in range(len(result)):
+    #     # print(scores[i])
+    #     print(result[i])
+    #     print(max_scores[i])
+
+
