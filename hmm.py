@@ -131,16 +131,18 @@ if __name__ == '__main__':
     # Four-direction falls (j), five trials each (i)
     for i in range(1, 6):
         for j in range(0, 4):
-            arg_dict["label_id"] = i
-            arg_dict["subject_id"] = j
-            sample = utilities.read_data_from_db(cur, **arg_dict)
-            sample = feature_gen.sample_around_peak(np.matrix(sample), 25, 25)
-            sample = utilities.mat_to_g(sample).tolist()
-            # sample = discretize(sample)
-            # print(sample)
-            # if arg_dict["label_id"] <= 3:
-            #     sample = sample[:-60]
-            sample_lists.append(sample[start_indices[index]-2:])
+            for k in range(1, 6):
+                arg_dict["sensor_id"] = k
+                arg_dict["label_id"] = i
+                arg_dict["subject_id"] = j
+                sample = utilities.read_data_from_db(cur, **arg_dict)
+                sample = feature_gen.sample_around_peak(np.matrix(sample), 25, 25)
+                sample = utilities.mat_to_g(sample).tolist()
+                # sample = discretize(sample)
+                # print(sample)
+                # if arg_dict["label_id"] <= 3:
+                #     sample = sample[:-60]
+                sample_lists.append(sample[start_indices[index]-2:])
             index += 1
 
     arg_dict2 = {
@@ -155,13 +157,15 @@ if __name__ == '__main__':
     for i in range(1, 9):
         test_lists.append([])
         for j in range(1, 6):
-            arg_dict2["label_id"] = i
-            arg_dict2["subject_id"] = j
-            sample = utilities.read_data_from_db(cur, **arg_dict2)
-            sample = utilities.mat_to_g(sample).tolist()
-            # sample = discretize(sample)
-            if len(sample) != 0:
-                test_lists[i-1].append(sample)
+            for k in range(1, 6):
+                arg_dict2["sensor_id"] = k
+                arg_dict2["label_id"] = i
+                arg_dict2["subject_id"] = j
+                sample = utilities.read_data_from_db(cur, **arg_dict2)
+                sample = utilities.mat_to_g(sample).tolist()
+                # sample = discretize(sample)
+                if len(sample) != 0:
+                    test_lists[i-1].append(sample)
 
     # sample_lists = sample_lists[:-8]
     x = np.matrix(np.concatenate([f for f in sample_lists])).T
@@ -214,8 +218,12 @@ if __name__ == '__main__':
 
     for s in sample_lists:
         result.append(hmm_classifier(models, s))
-
     print(result)
+    count = 0
+    for c in result:
+        if c == 8:
+            count += 1
+    print(count / len(result))
 
     # for i in range(len(result)):
     #     # print(scores[i])
@@ -234,6 +242,11 @@ if __name__ == '__main__':
             result2.append(hmm_classifier(models, s))
 
     print(result2)
+    count = 0
+    for c in result2:
+        if c != 8:
+            count += 1
+    print(count / len(result2))
     # for i in range(len(result)):
     #     # print(scores[i])
     #     print(result[i])
