@@ -61,6 +61,64 @@ def hmm_classifier(hmm_models, sample):
     return index
 
 
+def mat_to_g(value_list):
+    """
+
+    :param value_list: n x 3 matrix or list
+    :return: n x 1 matrix
+    """
+    if not isinstance(value_list, np.matrix):
+        mat = np.matrix(value_list)
+    else:
+        mat = value_list
+    mat = np.linalg.norm(mat, ord=2, axis=1, keepdims=True)
+    return mat
+
+
+def mat_to_vc(value_list):
+    """
+
+    :param value_list: n x 3 matrix or list
+    :return: n x 2 matrix
+    """
+    if not isinstance(value_list, np.matrix):
+        mat = np.matrix(value_list)
+    else:
+        mat = value_list
+    mat = feature_gen.calc_vt_comp_with_rem_mag(value_list)
+    return mat
+
+
+def sample_preprocessor(samples, func):
+    """
+
+    :param samples: a list of k lists, each list corresponding to the samples for a hmm model,
+      each sample is a time series of data points, each data point has one or more components
+    :param func: the function for converting the vectors, accepting n x 3 matrix or list
+    :return:
+    """
+    return_list = []
+    for i in range(samples):
+        return_list.append([])
+        sample_type_list = samples[i] # the list of samples from the same type
+        for j in range(sample_type_list):
+            return_list[i].append(func(sample_type_list[j]))
+    return return_list
+
+
+def hmm_model_evaluator(samples, pos_model_indices=None, n_fold=0, flag="g"):
+    """
+
+    :param samples: a list of k lists, each list corresponding to the samples for a hmm model,
+      each sample is a time series of data points, each data point has one or more components
+    :param pos_model_indices: a list of indices indicating positive hmm models
+    :param n_fold: n-fold cross validation. If 0, the training set itself is used as test set
+    :return:
+    """
+
+
+
+
 def discretize(list):
     ret_list = []
     for element in list:
@@ -137,7 +195,14 @@ if __name__ == '__main__':
                 arg_dict["subject_id"] = j
                 sample = utilities.read_data_from_db(cur, **arg_dict)
                 sample = feature_gen.sample_around_peak(np.matrix(sample), 25, 25)
-                sample = utilities.mat_to_g(sample).tolist()
+                print(sample)
+                print(np.matrix(sample))
+                print(np.linalg.norm(np.matrix(sample), ord=2, axis=1, keepdims=True))
+                sample = utilities.mat_to_g(sample)
+                print(sample)
+                exit(0)
+                # sample is a 2-D list
+
                 # sample = discretize(sample)
                 # print(sample)
                 # if arg_dict["label_id"] <= 3:
