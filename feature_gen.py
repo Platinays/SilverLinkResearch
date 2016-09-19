@@ -182,9 +182,14 @@ def calc_gravity(accel_mat):
     :param accel_mat:
     :return:
     """
-    p = identify_peak(accel_mat)[1]
+    # p = identify_peak(accel_mat)[1]
+    r, c = accel_mat.shape
+    p = 0
     # print(p)
-    return np.mean(accel_mat[p+36:p+48, :], axis=0)
+    if r > 48:
+        return np.mean(accel_mat[p+36:p+48, :], axis=0)
+    else:
+        return np.mean(accel_mat[p:p+12, :], axis=0)
 
 
 def calc_vt_comp(accel_mat):
