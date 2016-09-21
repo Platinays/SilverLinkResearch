@@ -87,6 +87,19 @@ def mat_to_vc(value_list):
     return mat
 
 
+def mat_to_peak(value_list):
+    """
+
+    :param value_list: n x 3 matrix or list
+    :return: n x 1 matrix
+    """
+    if not isinstance(value_list, np.matrix):
+        mat = np.matrix(value_list)
+    else:
+        mat = value_list
+    return feature_gen.identify_peak(mat)[0]
+
+
 def sample_preprocessor(samples, func=None):
     """
 
@@ -106,17 +119,58 @@ def sample_preprocessor(samples, func=None):
     return return_list
 
 
-def threshold_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fold=0, n_states=3, generalized=False, verbose=False):
+def gen_n_fold_indices(samples, n_fold):
+    """
+    A wrapper function for sklearn.cross_validation.KFold, performing stratified n-fold split
+    :param samples:
+    :param n_fold:
+    :return:
+    """
+    indices = []
+    for i in range(len(samples)):
+        # for each label (or type, model)
+        indices.append([])
+        for training_indices, test_indices in KFold(len(samples[i]), n_fold):
+            # generate n-fold indices
+            indices[i].append([training_indices, test_indices])
+    return indices
+
+
+
+def threshold_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fold=0, verbose=False):
+    """
+
+    :param samples: (preprocessed) a list of k lists, each list corresponding to the results of an experiment item,
+      each sample is a single-item list of peak
+    :param test_samples:
+    :param pos_model_indices:
+    :param n_fold:
+    :param generalized:
+    :param verbose:
+    :return:
+    """
+
+    # The threshold-based approach is always generalized.
+
     if n_fold == 0:
-        pass
+        if test_samples is None:
+            test_set = samples
+        else:
+            test_set = test_samples
+
+        gen_concat_samples = [[], []]
+        for sample_i in range(len(samples)):
+            is_positive = 1 if sample_i in pos_model_indices else 0
+            concat_samples = samples[sample_i]
+            if gen_concat_samples[is_positive] == []:
+                gen_concat_samples[is_positive] = concat_samples
+            else:
+                gen_concat_samples[is_positive] = np.concatenate((gen_concat_samples[is_positive], concat_samples))
+        print(gen_concat_samples)
+        exit(0)
+
     else:
-        n_fold_indices = []
-        for i in range(len(samples)):
-            # for each label (or type, model)
-            n_fold_indices.append([])
-            for training_indices, test_indices in KFold(len(samples[i]), n_fold):
-                # generate n-fold indices
-                n_fold_indices[i].append([training_indices, test_indices])
+        n_fold_indices = gen_n_fold_indices(samples, n_fold)
 
         # do the n-fold cross-validaion
         spec = []
@@ -130,7 +184,7 @@ def threshold_model_evaluator(samples, test_samples=None, pos_model_indices=None
                 current_samples = np.array(samples[i])
                 training.append(current_samples[n_fold_indices[i][k][0]])
                 test.append(current_samples[n_fold_indices[i][k][1]])
-            s1, s2 = hmm_model_evaluator(training, test, pos_model_indices, 0, n_states, generalized, verbose)
+            s1, s2 = hmm_model_evaluator(training, test, pos_model_indices, 0, verbose)
             spec.append(s1)
             sens.append(s2)
         # print(spec)
@@ -230,13 +284,7 @@ def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fo
 
         return return_list
     else: # k-fold cross-validation
-        n_fold_indices = []
-        for i in range(len(samples)):
-            # for each label (or type, model)
-            n_fold_indices.append([])
-            for training_indices, test_indices in KFold(len(samples[i]), n_fold):
-                # generate n-fold indices
-                n_fold_indices[i].append([training_indices, test_indices])
+        n_fold_indices = gen_n_fold_indices(samples, n_fold)
 
         # do the n-fold cross-validaion
         spec = []
@@ -255,7 +303,7 @@ def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fo
             sens.append(s2)
         # print(spec)
         # print(sens)
-        return np.mean(spec), np.mean(sens)
+        return (spec, sens)
 
 
 def discretize(list):
@@ -276,341 +324,167 @@ def discretize(list):
     return ret_list
 
 
-# def discretize(list):
-#     ret_list = []
-#     for element in list:
-#         if element < 250:
-#             ret_list.append(0)
-#         elif element < 500:
-#             ret_list.append(1)
-#         elif element < 700:
-#             ret_list.append(2)
-#         elif element < 1200:
-#             ret_list.append(3)
-#         elif element < 2000:
-#             ret_list.append(4)
-#         elif element < 2800:
-#             ret_list.append(5)
-#         elif element < 3600:
-#             ret_list.append(6)
-#         else:
-#             ret_list.append(7)
-#     return ret_list
+def load_samples_from_db(sensor_id=None):
+    """
+
+    :param sensor_id:
+    :return: a list of non_lists, fall_lists
+    """
+    non_lists = []
+    fall_lists = []
+
+    start, end = 1, 6
+    if sensor_id is not None:
+        start = sensor_id
+        end = sensor_id + 1
+
+    arg_dict = {
+        "sensor_id": 1, # 1 to 5
+        "subject_id": 1, # 1 to 5
+        "label_id": 1, # 1 to 4
+        "freq": 12.5,
+        "db_name": "test_data_fall_1_re",
+    }
+
+    # Four-direction falls (j), five trials each (i)
+    # corrected after refactor: Four-direction falls (i), five trials each (j)
+    for i in range(1, 5):
+        fall_lists.append([])
+        for j in range(1, 6):
+            for k in range(start, end):
+                arg_dict["sensor_id"] = k
+                arg_dict["label_id"] = i
+                arg_dict["subject_id"] = j
+                sample = utilities.read_data_from_db(cur, **arg_dict)
+                sample = feature_gen.sample_around_peak(np.matrix(sample), 25, 25)
+
+                # sample is a 2-D list
+
+                # sample = discretize(sample)
+
+                # if arg_dict["label_id"] <= 3:
+                #     sample = sample[:-60]
+                # adding_sample = sample[start_indices[index] - 2 :]
+                adding_sample = sample
+                if len(adding_sample) != 0:
+                    fall_lists[i-1].append(adding_sample)
+            # index += 1
+
+    # print(len(sample_lists))
+
+    arg_dict2 = {
+        "sensor_id": 1, # 1 to 5
+        "subject_id": 1, # 1 to 5
+        "label_id": 1, # 1 to 8
+        "freq": 12.5,
+        "db_name": "test_data_stage_1",
+    }
+
+    # Eight ADLs (i), five subjects each (j)
+    for i in range(1, 9):
+        non_lists.append([])
+        for j in range(1, 6):
+            for k in range(start, end):
+                arg_dict2["sensor_id"] = k
+                arg_dict2["label_id"] = i
+                arg_dict2["subject_id"] = j
+                sample = utilities.read_data_from_db(cur, **arg_dict2)
+                # sample = utilities.mat_to_g(sample).tolist()
+                # sample = discretize(sample)
+                if len(sample) != 0:
+                    non_lists[i-1].append(sample)
+
+    return non_lists, fall_lists
 
 
 if __name__ == '__main__':
     cur = utilities.db_connect()
 
     # start_indices = [20, 18, 18, 17, 19, 18, 17, 18, 19, 17, 17, 18, 16, 15, 16, 14, 17, 14, 11, 9]
-    do_pos_5 = False
+
+    do_pos_5 = True
     do_pos_1 = True
     spec_sens = False
-    root = 'c:/_test_space/hmm_fall_detection/pr_rc/'
-    # for k in range(1, 6):
+    root = 'c:/_test_space/hmm_fall_detection_corrected/pr_rc/'
+
+    # non_lists, fall_lists = load_samples_from_db()
+    #
+    # prep_lists = sample_preprocessor(non_lists + fall_lists, mat_to_peak)
+    # print(prep_lists)
+    # threshold_model_evaluator(prep_lists, None, [8, 9, 10, 11], 0, False)
+    n_loops = 1
+    max_n_states = 7
+    pos_model_indices = [8, 9, 10, 11]
+    use_metrics = [None, mat_to_g, mat_to_vc]
+    is_gen = [False, True]
+
     if do_pos_5:
-        sample_lists = []
-        test_lists = []
-        # print('##### Sensor ID = {} #####'.format(k))
-        arg_dict = {
-            "sensor_id": 1, # 1 to 5
-            "subject_id": 0, # 0 to 3
-            "label_id": 1, # 1 to 5
-            "freq": 12.5,
-            "db_name": "test_data_fall_1",
-        }
+        non_lists, fall_lists = load_samples_from_db()
+        outputs = [open(root + 'pos_5_sep.txt', 'a'), open(root + 'pos_5_gen.txt', 'a')]
 
-        index = 0
-        # Four-direction falls (j), five trials each (i)
-        for j in range(0, 4):
-            sample_lists.append([])
-            for i in range(1, 6):
-                for k in range(1, 6):
-                    arg_dict["sensor_id"] = k
-                    arg_dict["label_id"] = i
-                    arg_dict["subject_id"] = j
-                    sample = utilities.read_data_from_db(cur, **arg_dict)
-                    sample = feature_gen.sample_around_peak(np.matrix(sample), 25, 25)
-
-                    # sample is a 2-D list
-
-                    # sample = discretize(sample)
-
-                    # if arg_dict["label_id"] <= 3:
-                    #     sample = sample[:-60]
-                    # adding_sample = sample[start_indices[index] - 2 :]
-                    adding_sample = sample
-                    if len(adding_sample) != 0:
-                        sample_lists[j].append(adding_sample)
-                # index += 1
-
-        # print(len(sample_lists))
-
-
-        arg_dict2 = {
-            "sensor_id": 1, # 1 to 5
-            "subject_id": 1, # 1 to 5
-            "label_id": 1, # 1 to 8
-            "freq": 12.5,
-            "db_name": "test_data_stage_1",
-        }
-
-        # Eight ADLs (i), five subjects each (j)
-        for i in range(1, 9):
-            test_lists.append([])
-            for j in range(1, 6):
-                for k in range(1, 6):
-                    arg_dict2["sensor_id"] = k
-                    arg_dict2["label_id"] = i
-                    arg_dict2["subject_id"] = j
-                    sample = utilities.read_data_from_db(cur, **arg_dict2)
-                    # sample = utilities.mat_to_g(sample).tolist()
-                    # sample = discretize(sample)
-                    if len(sample) != 0:
-                        test_lists[i-1].append(sample)
-        n_loops = 5
-        use_metrics = [None, mat_to_g, mat_to_vc]
-        for m in range(3):
-            prep_lists = sample_preprocessor(sample_lists + test_lists, use_metrics[m])
+        for m in range(3): # three metrics
+            prep_lists = sample_preprocessor(non_lists + fall_lists, use_metrics[m])
             print('Sample preprocessed')
-            with open(root + 'pos_5_sep.txt', 'w') as output:
-                for n in range(3, 15):
-                    print('n = {}'.format(n))
+            for y in range(2): # not generalized & generalized
+                for n in range(3, max_n_states): # number of hidden states for HMM
                     accs = [0] * 2
+                    stds = [0] * 2
                     for p in range(n_loops):
-                        results = hmm_model_evaluator(prep_lists, pos_model_indices=[8, 9, 10, 11], n_states=n,
-                                                      generalized=False, n_fold=10, spec_sens=spec_sens)
+                        results = hmm_model_evaluator(prep_lists, pos_model_indices=pos_model_indices, n_states=n,
+                                                      generalized=is_gen[y], n_fold=10, spec_sens=spec_sens)
+                        outputs[y].write('  >> {}, {}\n'.format(*results))
                         for q in range(len(results)):
-                            accs[q] += results[q]
+                            accs[q] += np.mean(results[q])
+                            stds[q] += np.std(results[q])
                     for q in range(len(results)):
                         accs[q] /= n_loops
-                    print('n = {}, metric = {}, [Type 0]: {:.4g}, [Type 1]: {:.4g}'.format(n, m, accs[0], accs[1]))
-                    output.write('n = {}, metric = {}, [Type 0]: {:.4g}, [Type 1]: {:.4g}\n'.format(n, m, accs[0], accs[1]))
-
-            with open(root + 'pos_5_gen.txt', 'w') as output:
-                for n in range(3, 15):
-                    accs = [0] * 2
-                    for p in range(n_loops):
-                        results = hmm_model_evaluator(prep_lists, pos_model_indices=[8, 9, 10, 11], n_states=n,
-                                                      generalized=True, n_fold=10, spec_sens=spec_sens)
-                        for q in range(len(results)):
-                            accs[q] += results[q]
-                    for q in range(len(results)):
-                        accs[q] /= n_loops
-                    print('n = {}, metric = {}, [Type 0]: {:.4g}, [Type 1]: {:.4g}'.format(n, m, accs[0], accs[1]))
-                    output.write('n = {}, metric = {}, [Type 0]: {:.4g}, [Type 1]: {:.4g}\n'.format(n, m, accs[0], accs[1]))
-
-
+                        stds[q] /= n_loops
+                    output_str = 'n = {}, metric = {}, [0]: {:.4g} ({:.4g}), [1]: {:.4g} ({:.4g})\n'.format(
+                        n, m, accs[0], stds[0], accs[1], stds[1])
+                    print(output_str.rstrip())
+                    outputs[y].write(output_str)
+                    outputs[y].flush()
     ################################################################################
 
     if do_pos_1:
         for k in range(1, 6):
-            sample_lists = []
-            test_lists = []
-            output_sep = open(root + 'pos_1_sep.txt', 'a')
-            output_gen = open(root + 'pos_1_gen.txt', 'a')
-            output_sep.write('##### Sensor ID = {} #####\n'.format(k))
-            output_gen.write('##### Sensor ID = {} #####\n'.format(k))
-            arg_dict = {
-                "sensor_id": 1, # 1 to 5
-                "subject_id": 0, # 0 to 3
-                "label_id": 1, # 1 to 5
-                "freq": 12.5,
-                "db_name": "test_data_fall_1",
-            }
+            outputs = [open(root + 'pos_1_sep.txt', 'a'), open(root + 'pos_1_gen.txt', 'a')]
+            outputs[0].write('##### Sensor ID = {} #####\n'.format(k))
+            outputs[1].write('##### Sensor ID = {} #####\n'.format(k))
+            non_lists, fall_lists = load_samples_from_db(k)
+            for m in range(3): # three metrics
+                prep_lists = sample_preprocessor(non_lists + fall_lists, use_metrics[m])
 
-            index = 0
-            # Four-direction falls (j), five trials each (i)
-            for j in range(0, 4):
-                sample_lists.append([])
-                for i in range(1, 6):
-                    # for k in range(1, 6):
-                        arg_dict["sensor_id"] = k
-                        arg_dict["label_id"] = i
-                        arg_dict["subject_id"] = j
-                        sample = utilities.read_data_from_db(cur, **arg_dict)
-                        sample = feature_gen.sample_around_peak(np.matrix(sample), 25, 25)
-
-                        # sample is a 2-D list
-
-                        # sample = discretize(sample)
-
-                        # if arg_dict["label_id"] <= 3:
-                        #     sample = sample[:-60]
-                        # adding_sample = sample[start_indices[index] - 2 :]
-                        adding_sample = sample
-                        if len(adding_sample) != 0:
-                            sample_lists[j].append(adding_sample)
-                    # index += 1
-
-            # print(len(sample_lists))
-
-            print([len(e) for e in sample_lists])
-
-            arg_dict2 = {
-                "sensor_id": 1, # 1 to 5
-                "subject_id": 1, # 1 to 5
-                "label_id": 1, # 1 to 8
-                "freq": 12.5,
-                "db_name": "test_data_stage_1",
-            }
-
-            # Eight ADLs (i), five subjects each (j)
-            for i in range(1, 9):
-                test_lists.append([])
-                for j in range(1, 6):
-                    # for k in range(1, 6):
-                        arg_dict2["sensor_id"] = k
-                        arg_dict2["label_id"] = i
-                        arg_dict2["subject_id"] = j
-                        sample = utilities.read_data_from_db(cur, **arg_dict2)
-                        # sample = utilities.mat_to_g(sample).tolist()
-                        # sample = discretize(sample)
-                        if len(sample) != 0:
-                            test_lists[i-1].append(sample)
-
-            print([len(e) for e in test_lists])
-
-            n_loops = 5
-            use_metrics = [None, mat_to_g, mat_to_vc]
-            for m in range(0, 3):
-                prep_lists = sample_preprocessor(sample_lists + test_lists, use_metrics[m])
-
-                for n in range(3, 15):
-                    accs = [0] * 2
-                    for p in range(n_loops):
-                        try:
-                            results = hmm_model_evaluator(prep_lists, pos_model_indices=[8, 9, 10, 11], n_states=n,
-                                                          generalized=False, n_fold=5, spec_sens=spec_sens)
-                        except Exception:
-                            results = hmm_model_evaluator(prep_lists, pos_model_indices=[8, 9, 10, 11], n_states=n,
-                                                          generalized=False, n_fold=3, spec_sens=spec_sens)
+                for y in range(2): # not generalized & generalized
+                    for n in range(3, max_n_states): # number of hidden states for HMM
+                        accs = [0] * 2
+                        stds = [0] * 2
+                        for p in range(n_loops):
+                            try:
+                                results = hmm_model_evaluator(prep_lists,
+                                                              pos_model_indices=pos_model_indices,
+                                                              n_states=n,
+                                                              generalized=is_gen[y], n_fold=5, spec_sens=spec_sens)
+                                outputs[y].write('  >> {}, {}\n'.format(*results))
+                            except Exception:
+                                results = hmm_model_evaluator(prep_lists,
+                                                              pos_model_indices=pos_model_indices,
+                                                              n_states=n,
+                                                              generalized=is_gen[y], n_fold=3, spec_sens=spec_sens)
+                                outputs[y].write('  >> {}, {}\n'.format(*results))
+                            for q in range(len(results)):
+                                accs[q] += np.mean(results[q])
+                                stds[q] += np.std(results[q])
                         for q in range(len(results)):
-                            accs[q] += results[q]
-                    for q in range(len(results)):
-                        accs[q] /= n_loops
-                    print('n = {}, metric = {}, [Type 0]: {:.4g}, [Type 1]: {:.4g}'.format(n, m, accs[0], accs[1]))
-                    output_sep.write('n = {}, metric = {}, [Type 0]: {:.4g}, [Type 1]: {:.4g}\n'.format(n, m, accs[0], accs[1]))
-                    output_sep.flush()
+                            accs[q] /= n_loops
+                            stds[q] /= n_loops
+                        output_str = 'n = {}, metric = {}, [0]: {:.4g} ({:.4g}), [1]: {:.4g} ({:.4g})\n'.format(
+                            n, m, accs[0], stds[0], accs[1], stds[1])
+                        print(output_str.rstrip())
+                        outputs[y].write(output_str)
+                        outputs[y].flush()
 
                 # print ([len(everything) for everything in prep_lists])
                 # for a in range(len(prep_lists)):
                 #     for b in range(len(prep_lists[a])):
                 #         print('a = {}, b = {}, first fifteen: {}'.format(a, b, prep_lists[a][b][:15]))
-
-                for n in range(3, 15):
-                    accs = [0] * 2
-                    for p in range(n_loops):
-                        try:
-                            results = hmm_model_evaluator(prep_lists, pos_model_indices=[8, 9, 10, 11], n_states=n,
-                                                          generalized=True, n_fold=5, spec_sens=spec_sens)
-                        except Exception:
-                            print('n_fold = 5 failed, trying n_fold = 3...')
-                            results = hmm_model_evaluator(prep_lists, pos_model_indices=[8, 9, 10, 11], n_states=n,
-                                                          generalized=True, n_fold=3, spec_sens=spec_sens)
-                        for q in range(len(results)):
-                            accs[q] += results[q]
-                    for q in range(len(results)):
-                        accs[q] /= n_loops
-                    print('n = {}, metric = {}, [Type 0]: {:.4g}, [Type 1]: {:.4g}'.format(n, m, accs[0], accs[1]))
-                    output_gen.write('n = {}, metric = {}, [Type 0]: {:.4g}, [Type 1]: {:.4g}\n'.format(n, m, accs[0], accs[1]))
-                    output_gen.flush()
-
-
-    exit(0)
-
-
-
-
-
-
-
-
-
-
-
-    # sample_lists = sample_lists[:-8]
-    x = np.matrix(np.concatenate([f for f in sample_lists])).T
-    l = [len(s) for s in sample_lists]
-    # model = hmm.GaussianHMM(n_components=3, n_iter=100)
-    model = hmm.GaussianHMM(n_components=3)
-    # model.startprob_ = np.array([1, 0, 0])
-    # model.transmat_ = np.array([[0.9, 0.1, 0.0],
-    #                             [0.0, 0.9, 0.1],
-    #                             [0.1, 0.0, 0.9]])
-    # model.emissionprob_ = np.array([[1/6,] * 6, [1/6,] * 6, [1/6, ] * 6])
-    model.fit(x, l)
-    print(model.transmat_)
-    print(model.means_)
-    print(model.covars_)
-    # exit(0)
-
-    models = []
-    for i in range(len(test_lists)):
-        print("len({}) = {}".format(i, len(test_lists[i])))
-        xs = np.matrix(np.concatenate([f for f in test_lists[i]])).T
-        ls = [len(s) for s in test_lists[i]]
-        ms = hmm.GaussianHMM(n_components=3)
-        # a = np.matrix(test_lists[0][0]).T
-        ms.fit(xs, ls)
-        models.append(ms)
-
-    models.append(model)  # add the fall model to the models
-    # exit(1)
-
-    # r = []
-    # for s in test_lists:
-    #     r.append(model_eval(s, model, models))
-    #
-    # print(r)
-    #
-    # r2 = []
-    # for s in sample_lists:
-    #     r2.append(model_eval(s, model, models))
-    #
-    # print(r2)
-    # {
-
-    # (x, l) = model_samples_generator(test_lists)
-    # print(model.score(x, l))
-
-    result = []
-    # scores = []
-    # max_scores = []
-
-    for s in sample_lists:
-        result.append(hmm_classifier(models, s))
-    print(result)
-    count = 0
-    for c in result:
-        if c == 8:
-            count += 1
-    print(count / len(result))
-
-    # for i in range(len(result)):
-    #     # print(scores[i])
-    #     print(result[i])
-    #     print(max_scores[i])
-    # # }
-    #
-    # result = []
-    # scores = []
-    # max_scores = []
-
-    result2 = []
-    for g in test_lists:
-        for s in g:
-        # print(s)
-            result2.append(hmm_classifier(models, s))
-
-    print(result2)
-    count = 0
-    for c in result2:
-        if c != 8:
-            count += 1
-    print(count / len(result2))
-    # for i in range(len(result)):
-    #     # print(scores[i])
-    #     print(result[i])
-    #     print(max_scores[i])
-
-
