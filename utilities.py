@@ -152,8 +152,8 @@ if __name__ == '__main__':
     cur = db_connect()
     csv_file = 'c:/1.csv'
     arg_dict = {
-        "sensor_id": 2,
-        "subject_id": 2,
+        "sensor_id": 5,
+        "subject_id": 1,
         "label_id": 5,
         "freq": 12.5,
         "db_name": "test_data_fall_1",
