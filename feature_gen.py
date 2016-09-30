@@ -151,7 +151,6 @@ def sample_around_peak(accel_mat, before=24, after=32):
     temp_mat = accel_mat[start:end, :]
     if peak_index - before < 0:
         pre = np.array(accel_mat[0, :].tolist() * (before - peak_index)).reshape(-1, 3)
-        # print(pre)
         temp_mat = np.concatenate((np.matrix(pre), temp_mat))
     if peak_index + after > accel_mat.shape[0]:
         post = np.array(accel_mat[-1, :].tolist() * (peak_index + after - accel_mat.shape[0])).reshape(-1, 3)

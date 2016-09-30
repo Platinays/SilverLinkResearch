@@ -136,6 +136,55 @@ def gen_n_fold_indices(samples, n_fold):
     return indices
 
 
+def f_score(pr, rc):
+    return 2 * pr * rc / (pr + rc) if pr + rc > 0 else 0
+
+
+def thres_calc_pr_rc(samples, thres):
+    true_pos = 0
+    true_neg = 0
+    for value in samples[0]:
+        if value < thres:
+            true_neg += 1
+    for value in samples[1]:
+        if value > thres:
+            true_pos += 1
+    print('{}, (-): {} / {}, (+): {} / {}'.format(thres, true_neg, len(samples[0]), true_pos, len(samples[1])))
+    pr = true_pos / (true_pos + len(samples[0]) - true_neg) if (true_pos + len(samples[0]) - true_neg) != 0 else 0
+    rc = true_pos / len(samples[1])
+    # exit(0)
+    return pr, rc
+
+
+def generalize(samples, pos_model_indices):
+    gen_concat_samples = [[], []]
+    for sample_i in range(len(samples)):
+        is_positive = 1 if sample_i in pos_model_indices else 0
+        concat_samples = samples[sample_i]
+        if gen_concat_samples[is_positive] == []:
+            gen_concat_samples[is_positive] = concat_samples
+        else:
+            gen_concat_samples[is_positive] = np.concatenate((gen_concat_samples[is_positive], concat_samples))
+    return gen_concat_samples
+
+
+def search_best_thres(samples):
+    """
+
+    :param samples: a list of two lists with the first negative (-) samples and the second positive (+) samples
+    :param metric:
+    :return:
+    """
+    best_thres = 0
+    best_met = 0
+    for thres in range(1000, 4100, 100):
+        pr, rc = thres_calc_pr_rc(samples, thres)
+        met = f_score(pr, rc)
+        if met > best_met:
+            best_thres = thres
+            best_met = met
+    return best_thres
+
 
 def threshold_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fold=0, verbose=False):
     """
@@ -158,16 +207,105 @@ def threshold_model_evaluator(samples, test_samples=None, pos_model_indices=None
         else:
             test_set = test_samples
 
-        gen_concat_samples = [[], []]
-        for sample_i in range(len(samples)):
-            is_positive = 1 if sample_i in pos_model_indices else 0
-            concat_samples = samples[sample_i]
-            if gen_concat_samples[is_positive] == []:
-                gen_concat_samples[is_positive] = concat_samples
-            else:
-                gen_concat_samples[is_positive] = np.concatenate((gen_concat_samples[is_positive], concat_samples))
-        print(gen_concat_samples)
-        exit(0)
+        # search for a best threshold to discriminate the two sets
+        best_thres = search_best_thres(generalize(samples, pos_model_indices))
+        pr, rc = thres_calc_pr_rc(generalize(test_set, pos_model_indices), best_thres)
+        return pr, rc, best_thres
+
+    else:
+        n_fold_indices = gen_n_fold_indices(samples, n_fold)
+
+        # do the n-fold cross-validaion
+        spec = []
+        sens = []
+        thres_list = []
+        for k in range(n_fold):
+            # separate the samples into training and test
+            training = []
+            test = []
+
+            for i in range(len(samples)):
+                current_samples = np.array(samples[i])
+                training.append(current_samples[n_fold_indices[i][k][0]])
+                test.append(current_samples[n_fold_indices[i][k][1]])
+
+
+            s1, s2, s3 = threshold_model_evaluator(training, test, pos_model_indices, 0, verbose)
+            spec.append(s1)
+            sens.append(s2)
+            thres_list.append(s3)
+        # print(spec)
+        # print(sens)
+        return spec, sens, thres_list
+
+
+def calc_euclid_dist(mat_1, mat_2):
+    return np.mean(np.linalg.norm(mat_1 - mat_2, ord=2, axis=1))
+
+
+def knn_classifier(lazy_models, sample, k=1):
+    n_samples_model = [len(e) for e in lazy_models]
+    flat_list = np.concatenate(lazy_models)
+    min_dist_list = [1e6] * k
+    indices = [-1] * k
+    # print(k)
+    for i in range(len(flat_list)):
+        dist = calc_euclid_dist(flat_list[i], sample)
+        for j in range(k):
+            # print(dist, min_dist_list[j])
+            if dist < min_dist_list[j]:
+                # print(min_dist_list)
+                min_dist_list.insert(j, dist)
+                # print(min_dist_list)
+                min_dist_list.pop()
+                # print(min_dist_list)
+
+                # print(indices)
+                indices.insert(j, 0 if i < n_samples_model[0] else 1)
+                # indices.insert(j, i)
+                # print(indices)
+                indices.pop()
+                # print(indices)
+                break
+
+    return 0 if np.mean(indices) < 0.5 else 1
+
+
+def knn_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fold=0, k_nearest=1, verbose=False):
+    """
+
+    :param samples: (preprocessed) a list of k lists, each list corresponding to the results of an experiment item,
+      each sample is a single-item list of peak
+    :param test_samples:
+    :param pos_model_indices:
+    :param n_fold:
+    :param generalized:
+    :param verbose:
+    :return:
+    """
+
+    # The threshold-based approach is always generalized.
+
+    if n_fold == 0:
+        if test_samples is None:
+            test_set = samples
+        else:
+            test_set = test_samples
+
+        # search for a best threshold to discriminate the two sets
+        gen_samples = generalize(samples, pos_model_indices)
+        gen_tests = generalize(test_set, pos_model_indices)
+
+        trues = [0, 0]
+        for i in range(2):
+            for item in gen_tests[i]:
+                if knn_classifier(gen_samples, item, k_nearest) == i:
+                    trues[i] += 1
+
+        pr = trues[1] / (trues[1] + len(gen_tests[0]) - trues[0]) if trues[1] + len(gen_tests[0]) - trues[0] != 0 else 0
+        rc = trues[1] / len(gen_tests[1])
+        print('{} / {}, {} / {}'.format(trues[0], len(gen_tests[0]), trues[1], len(gen_tests[1])))
+        return pr, rc
 
     else:
         n_fold_indices = gen_n_fold_indices(samples, n_fold)
@@ -184,12 +322,13 @@ def threshold_model_evaluator(samples, test_samples=None, pos_model_indices=None
                 current_samples = np.array(samples[i])
                 training.append(current_samples[n_fold_indices[i][k][0]])
                 test.append(current_samples[n_fold_indices[i][k][1]])
-            s1, s2 = hmm_model_evaluator(training, test, pos_model_indices, 0, verbose)
+
+            s1, s2= knn_model_evaluator(training, test, pos_model_indices, n_fold=0, k_nearest=k_nearest, verbose=verbose)
             spec.append(s1)
             sens.append(s2)
         # print(spec)
         # print(sens)
-        return np.mean(spec), np.mean(sens)
+        return spec, sens
 
 
 def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fold=0, n_states=3, generalized=False, verbose=False, spec_sens=True):
@@ -280,7 +419,10 @@ def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fo
                     print(type_dict)
                 return_list.append(hit_dict[key] / type_dict[key])
         else: # use precision and recall
-            return_list = [hit_dict[1] / (hit_dict[1] + type_dict[0] - hit_dict[0]), hit_dict[1] / type_dict[1]]
+            # print('{} / {}, {} / {}'.format(hit_dict[1], hit_dict[1] + type_dict[0] - hit_dict[0], hit_dict[1], type_dict[1]))
+            return_list = [hit_dict[1] / (hit_dict[1] + type_dict[0] - hit_dict[0])
+                           if hit_dict[1] + type_dict[0] - hit_dict[0] != 0 else 0,
+                           hit_dict[1] / type_dict[1]]
 
         return return_list
     else: # k-fold cross-validation
@@ -389,15 +531,17 @@ def load_samples_from_db(sensor_id=None):
                 arg_dict2["label_id"] = i
                 arg_dict2["subject_id"] = j
                 sample = utilities.read_data_from_db(cur, **arg_dict2)
+                if len(sample) == 0:
+                    continue
+                sample = feature_gen.sample_around_peak(np.matrix(sample), 25, 25)
+                non_lists[i-1].append(sample)
                 # sample = utilities.mat_to_g(sample).tolist()
                 # sample = discretize(sample)
-                if len(sample) != 0:
-                    non_lists[i-1].append(sample)
 
     return non_lists, fall_lists
 
 
-if __name__ == '__main__':
+def execute_hmm():
     cur = utilities.db_connect()
 
     # start_indices = [20, 18, 18, 17, 19, 18, 17, 18, 19, 17, 17, 18, 16, 15, 16, 14, 17, 14, 11, 9]
@@ -488,3 +632,151 @@ if __name__ == '__main__':
                 # for a in range(len(prep_lists)):
                 #     for b in range(len(prep_lists[a])):
                 #         print('a = {}, b = {}, first fifteen: {}'.format(a, b, prep_lists[a][b][:15]))
+
+
+def execute_thres():
+    cur = utilities.db_connect()
+    do_pos_5 = True
+    do_pos_1 = True
+    n_loops = 1
+    pos_model_indices = [8, 9, 10, 11]
+    y = 0
+    root = 'c:/_test_space/thres_fall_detection/'
+    if do_pos_5:
+        non_lists, fall_lists = load_samples_from_db()
+        outputs = [open(root + 'pos_5.txt', 'a')]
+
+        prep_lists = sample_preprocessor(non_lists + fall_lists, mat_to_peak)
+        print('Sample preprocessed')
+        accs = [0] * 2
+        stds = [0] * 2
+        thress = []
+        for p in range(n_loops):
+            results = threshold_model_evaluator(prep_lists, pos_model_indices=pos_model_indices, n_fold=10)
+
+            outputs[y].write('  >> {}, {}, {}\n'.format(*results))
+            for q in range(2):
+                accs[q] += np.mean(results[q])
+                stds[q] += np.std(results[q])
+            thress.append(results[2])
+
+
+        for q in range(2):
+            accs[q] /= n_loops
+            stds[q] /= n_loops
+        output_str = '[0]: {:.4g} ({:.4g}), [1]: {:.4g} ({:.4g}), {}\n'.format(
+            accs[0], stds[0], accs[1], stds[1], thress)
+        print(output_str.rstrip())
+        outputs[y].write(output_str)
+        outputs[y].flush()
+    if do_pos_1:
+        for k in range(1, 6):
+            non_lists, fall_lists = load_samples_from_db(k)
+            outputs = [open(root + 'pos_1.txt', 'a')]
+            outputs[0].write('##### Sensor ID = {} #####\n'.format(k))
+
+            prep_lists = sample_preprocessor(non_lists + fall_lists, mat_to_peak)
+            print('Sample preprocessed')
+            accs = [0] * 2
+            stds = [0] * 2
+            thress = []
+            for p in range(n_loops):
+                try:
+                    results = threshold_model_evaluator(prep_lists, pos_model_indices=pos_model_indices, n_fold=5)
+                except Exception:
+                    results = threshold_model_evaluator(prep_lists, pos_model_indices=pos_model_indices, n_fold=3)
+                outputs[y].write('  >> {}, {}, {}\n'.format(*results))
+                for q in range(2):
+                    accs[q] += np.mean(results[q])
+                    stds[q] += np.std(results[q])
+                thress.append(results[2])
+            for q in range(2):
+                accs[q] /= n_loops
+                stds[q] /= n_loops
+            output_str = '[0]: {:.4g} ({:.4g}), [1]: {:.4g} ({:.4g}), {}\n'.format(
+                accs[0], stds[0], accs[1], stds[1], thress)
+            print(output_str.rstrip())
+            outputs[y].write(output_str)
+            outputs[y].flush()
+
+
+if __name__ == '__main__':
+    cur = utilities.db_connect()
+
+    # start_indices = [20, 18, 18, 17, 19, 18, 17, 18, 19, 17, 17, 18, 16, 15, 16, 14, 17, 14, 11, 9]
+
+    do_pos_5 = True
+    do_pos_1 = True
+    spec_sens = False
+    root = 'c:/_test_space/knn_fall_detection/'
+
+    # non_lists, fall_lists = load_samples_from_db()
+    #
+    # prep_lists = sample_preprocessor(non_lists + fall_lists, mat_to_peak)
+    # print(prep_lists)
+    # threshold_model_evaluator(prep_lists, None, [8, 9, 10, 11], 0, False)
+    n_loops = 1
+    pos_model_indices = [8, 9, 10, 11]
+    use_metrics = [None, mat_to_g, mat_to_vc]
+    is_gen = [False, True]
+    y = 0
+    for k_nearest in range(1, 6, 2):
+        if do_pos_5:
+            non_lists, fall_lists = load_samples_from_db()
+            outputs = [open(root + 'pos_5_k{}.txt'.format(k_nearest), 'a')]
+
+            for m in range(3): # three metrics
+                prep_lists = sample_preprocessor(non_lists + fall_lists, use_metrics[m])
+                # print('Sample preprocessed')
+                # print([len(x) for x in prep_lists])
+                accs = [0] * 2
+                stds = [0] * 2
+                for p in range(n_loops):
+                    results = knn_model_evaluator(prep_lists, pos_model_indices=pos_model_indices,
+                                                  n_fold=10, k_nearest=k_nearest)
+                    outputs[y].write('  >> {}, {}\n'.format(*results))
+                    for q in range(len(results)):
+                        accs[q] += np.mean(results[q])
+                        stds[q] += np.std(results[q])
+                for q in range(len(results)):
+                    accs[q] /= n_loops
+                    stds[q] /= n_loops
+                output_str = 'metric = {}, [0]: {:.4g} ({:.4g}), [1]: {:.4g} ({:.4g})\n'.format(
+                    m, accs[0], stds[0], accs[1], stds[1])
+                print(output_str.rstrip())
+                outputs[y].write(output_str)
+                outputs[y].flush()
+        ################################################################################
+
+        if do_pos_1:
+            for k in range(1, 6):
+                outputs = [open(root + 'pos_1_k{}.txt'.format(k_nearest), 'a')]
+                outputs[0].write('##### Sensor ID = {} #####\n'.format(k))
+                non_lists, fall_lists = load_samples_from_db(k)
+                for m in range(3): # three metrics
+                    prep_lists = sample_preprocessor(non_lists + fall_lists, use_metrics[m])
+
+                    accs = [0] * 2
+                    stds = [0] * 2
+                    for p in range(n_loops):
+                        try:
+                            results = knn_model_evaluator(prep_lists,
+                                                          pos_model_indices=pos_model_indices,
+                                                          n_fold=5, k_nearest=k_nearest)
+                            outputs[y].write('  >> {}, {}\n'.format(*results))
+                        except Exception:
+                            results = knn_model_evaluator(prep_lists,
+                                                          pos_model_indices=pos_model_indices,
+                                                          n_fold=3, k_nearest=k_nearest)
+                            outputs[y].write('  >> {}, {}\n'.format(*results))
+                        for q in range(len(results)):
+                            accs[q] += np.mean(results[q])
+                            stds[q] += np.std(results[q])
+                    for q in range(len(results)):
+                        accs[q] /= n_loops
+                        stds[q] /= n_loops
+                    output_str = 'metric = {}, [0]: {:.4g} ({:.4g}), [1]: {:.4g} ({:.4g})\n'.format(
+                        m, accs[0], stds[0], accs[1], stds[1])
+                    print(output_str.rstrip())
+                    outputs[y].write(output_str)
+                    outputs[y].flush()
