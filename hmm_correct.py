@@ -278,7 +278,7 @@ def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fo
                     print('[Type {}]: {} total, {} hit, {:.4g} accuracy'.format(key, type_dict[key], hit_dict[key], hit_dict[key] / type_dict[key]))
                     print(hit_dict)
                     print(type_dict)
-                return_list.append(hit_dict[key] / type_dict[key])
+                return_list.append(hit_dict[key])
         else: # use precision and recall
             return_list = [hit_dict[1] / (hit_dict[1] + type_dict[0] - hit_dict[0]), hit_dict[1] / type_dict[1]]
 
@@ -324,7 +324,7 @@ def discretize(list):
     return ret_list
 
 
-def load_samples_from_db(sensor_id=None):
+def load_samples_from_db(cur=None, sensor_id=None):
     """
 
     :param sensor_id:
@@ -404,7 +404,7 @@ if __name__ == '__main__':
 
     do_pos_5 = True
     do_pos_1 = False
-    spec_sens = False
+    spec_sens = True
     root = 'c:/_test_space/hmm_fall_detection_double_check/'
 
     # non_lists, fall_lists = load_samples_from_db()
@@ -419,7 +419,7 @@ if __name__ == '__main__':
     is_gen = [False, True]
 
     if do_pos_5:
-        non_lists, fall_lists = load_samples_from_db()
+        non_lists, fall_lists = load_samples_from_db(cur)
         outputs = [open(root + 'pos_5_sep.txt', 'a'), open(root + 'pos_5_gen.txt', 'a')]
 
         for m in range(3): # three metrics
@@ -434,7 +434,7 @@ if __name__ == '__main__':
                                                       generalized=is_gen[y], n_fold=10, spec_sens=spec_sens)
                         outputs[y].write('  >> {}, {}\n'.format(*results))
                         for q in range(len(results)):
-                            accs[q] += np.mean(results[q])
+                            accs[q] += np.sum(results[q])
                             stds[q] += np.std(results[q])
                     for q in range(len(results)):
                         accs[q] /= n_loops
@@ -451,7 +451,7 @@ if __name__ == '__main__':
             outputs = [open(root + 'pos_1_sep.txt', 'a'), open(root + 'pos_1_gen.txt', 'a')]
             outputs[0].write('##### Sensor ID = {} #####\n'.format(k))
             outputs[1].write('##### Sensor ID = {} #####\n'.format(k))
-            non_lists, fall_lists = load_samples_from_db(k)
+            non_lists, fall_lists = load_samples_from_db(cur, k)
             for m in range(3): # three metrics
                 prep_lists = sample_preprocessor(non_lists + fall_lists, use_metrics[m])
 
