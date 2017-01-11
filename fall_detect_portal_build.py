@@ -21,7 +21,7 @@ def hmm_build(samples, n_states):
 if __name__ == '__main__':
     cur = utilities.db_connect()
     n_states = 6
-    non_lists, fall_lists = hmm_correct.load_samples_from_db(None, cur)
+    non_lists, fall_lists = hmm_correct.load_samples_from_db(cur)
     prep_lists = hmm_correct.sample_preprocessor(non_lists + fall_lists, hmm_correct.mat_to_vc)
     hmm_models = hmm_build(prep_lists, n_states)
     file = open('c:/hmm_models.pkl', 'wb')
