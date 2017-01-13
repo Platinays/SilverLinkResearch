@@ -26,3 +26,4 @@ if __name__ == '__main__':
     hmm_models = hmm_build(prep_lists, n_states)
     file = open('c:/hmm_models.pkl', 'wb')
     pickle.dump(hmm_models, file, protocol=3)
+    file.close()

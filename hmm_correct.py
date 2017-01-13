@@ -7,6 +7,8 @@ import utilities
 import feature_gen
 import collections
 
+import pickle
+
 N = 50
 
 def dict_inc(dict, key):
@@ -235,6 +237,11 @@ def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fo
                 hmm_models.append(model)
         # test hmm models
         # 1. prepare "true" tags
+
+        # file = open('c:/hmm_models.pkl', 'wb')
+        # pickle.dump(hmm_models, file, protocol=3)
+        # file.close()
+
         hmm_index = -1
         true_tags = []
         test_tags = []
@@ -244,6 +251,7 @@ def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fo
             hmm_index += 1
             for time_series in samples_for_a_hmm:
                 eval_index = hmm_classifier(hmm_models, np.matrix(time_series))
+                # print(hmm_index, eval_index)
                 if pos_model_indices is None:
                     true_tags.append(hmm_index)
                     test_tags.append(eval_index)
