@@ -1,13 +1,10 @@
 __author__ = 'Shuo Yu'
-from sklearn.externals import joblib
 from hmmlearn import hmm
 from sklearn.cross_validation import KFold
 import numpy as np
 import utilities
 import feature_gen
 import collections
-
-import pickle
 
 N = 50
 

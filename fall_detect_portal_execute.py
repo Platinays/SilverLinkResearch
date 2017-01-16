@@ -50,6 +50,10 @@ def classify_with_ts(instance, hmm_models, interval=10000, freq=None, fall_seg_t
     :return: 1 or 0, denoting whether (1) or not (0) a fall exists.
     """
     try:
+        peak_mag = np.linalg.norm(hmm_correct.mat_to_peak(np.matrix(instance)[:, 1:4]))
+        if peak_mag < 2200:
+            return 0
+
         # freq_inv is the interval between two consecutive timestamps, in milliseconds
         if freq is None:
             freq_inv = instance[1][0] - instance[0][0]
