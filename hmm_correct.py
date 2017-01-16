@@ -405,6 +405,67 @@ def load_samples_from_db(cur=None, sensor_id=None):
     return non_lists, fall_lists
 
 
+def load_fall_samples_from_farseeing(cur, interval=5000):
+    sql = 'SELECT subject_id, timestamp FROM test_data_farseeing where label_id != 0;'
+    cur.execute(sql)
+    sub_ts_dict = {}
+    for row in cur:
+        subject_id = int(row[0])
+        timestamp = int(row[1])
+        sub_ts_dict[subject_id] = timestamp
+
+    ret_list = []
+    counter = 0
+    for sub in sub_ts_dict:
+        ret_list.append([])
+        sql = '''SELECT timestamp, x_accel, y_accel, z_accel
+            FROM test_data_farseeing
+            WHERE subject_id = '{0}' AND timestamp >= {1} - {2} AND timestamp < {1} + {2}
+        '''.format(sub, sub_ts_dict[sub], interval)
+        cur.execute(sql)
+        for row in cur:
+            ret_list[counter].append([int(row[0]), int(row[1]), int(row[2]), int(row[3])])
+        counter += 1
+
+    return ret_list
+
+
+def load_non_samples_from_farseeing(cur, interval=5000, before_after=60000):
+    sql = 'SELECT subject_id, timestamp FROM test_data_farseeing where label_id != 0;'
+    cur.execute(sql)
+    sub_ts_dict = {}
+    for row in cur:
+        subject_id = int(row[0])
+        timestamp = int(row[1])
+        sub_ts_dict[subject_id] = timestamp
+
+    ret_list = []
+    counter = 0
+    for sub in sub_ts_dict:
+        start_ts = sub_ts_dict[sub] - before_after - interval
+        cur_ts = start_ts
+        end_ts = sub_ts_dict[sub] + before_after - interval
+
+        while cur_ts < end_ts:
+            if cur_ts < sub_ts_dict[sub] and cur_ts + interval * 2 > sub_ts_dict[sub]: # skip segment with fall
+                cur_ts += interval * 2
+                continue
+
+            ret_list.append([])
+            sql = '''SELECT timestamp, x_accel, y_accel, z_accel
+                FROM test_data_farseeing
+                WHERE subject_id = '{0}' AND timestamp >= {1} AND timestamp < {2}
+            '''.format(sub, cur_ts, cur_ts + interval * 2)
+            cur.execute(sql)
+            for row in cur:
+                ret_list[counter].append([int(row[0]), int(row[1]), int(row[2]), int(row[3])])
+            counter += 1
+            # if counter % 100 == 0:
+            #     print(counter)
+            cur_ts += interval * 2
+
+    return ret_list
+
 if __name__ == '__main__':
     cur = utilities.db_connect()
 

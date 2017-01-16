@@ -59,6 +59,26 @@ def read_data_from_fall_db(cur, sensor_id, subject_id, label_id, freq):
     return ret_list
 
 
+def read_data_from_farseeing_db(cur, subject_id, is_find_falls, ts_start, ts_end):
+    if is_find_falls:
+        sql = '''
+            SELECT timestamp, x_accel, y_accel, z_accel
+            FROM test_data_farseeing
+            WHERE subject_id = '%s' AND label_id != 0 AND timestamp >= '%s' AND timestamp <= '%s'
+        ''' % (subject_id, ts_start, ts_end)
+    else:
+        sql = '''
+            SELECT timestamp, x_accel, y_accel, z_accel
+            FROM test_data_farseeing
+            WHERE subject_id = '%s' AND timestamp >= '%s' AND timestamp <= '%s'
+        ''' % (subject_id, ts_start, ts_end)
+    cur.execute(sql)
+    ret_list = []
+    for row in cur:
+        ret_list.append([int(row[1]), int(row[2]), int(row[3])])
+    return ret_list
+
+
 def db_to_csv(csv_name, db_name, sensor_id, subject_id, label_id):
     cur = db_connect()
     mat = np.matrix(read_data_from_db(cur, sensor_id, subject_id, label_id, 12.5, db_name))
