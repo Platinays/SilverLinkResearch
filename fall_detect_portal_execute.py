@@ -4,9 +4,8 @@ import pickle
 import hmm_correct
 import utilities
 import numpy as np
-import fall_detect_portal_build
 
-hmm_model_path = 'c:/hmm_models.pkl'
+hmm_model_path = 'hmm_models.pkl'
 try:
     with open(hmm_model_path, 'rb') as hmm_file:
         hmm_models = pickle.load(hmm_file)
@@ -34,16 +33,17 @@ def classify(instance, hmm_models, n=8):
     return 0 if index < n else 1
 
 
-def classify_with_ts(instance, hmm_models, interval=10000, freq=None, fall_seg_thres=1, n=8):
+def classify_with_ts(instance, hmm_models, interval=1000, freq=None, fall_seg_thres=1, n=8):
     """
     Segment the instance into segments. Detect falls from those segments.
     :param instance: a n x 4 matrix denoting a snippet of timestamp and 3-axial acceleration data
     :param hmm_models: the pickled hmms. change 'hmm_model_path' to locate the proper file for pickled hmms.
     :param interval: define the interval to segment the input data, in milliseconds. E.g., for a snippet of 120 secs,
-              setting interval to 10000 will segment the data into 12 segments, each independently detected for falls.
-    :param fall_seg_thres: the number of fall segments that is needed to declare a fall detected. 1 by default.
+              setting interval to 1000 will segment the data into 120 segments, each independently detected for falls.
+              Suggested to be 1000.
     :param freq: the frequency of sample collected. Set it to None to let the script infer the frequency from the first
               two data points of the instance. Set it to a fixed value if the data stream is unstable.
+    :param fall_seg_thres: the number of fall segments that is needed to declare a fall detected. 1 by default.
     :param n: this param denotes the number of non-fall hmms. by default, 12 hmms are trained for different categories
               of falls and non-falls. The first 8 are non-falls by default.
               Adjust this param if the number of hmms has changed.
@@ -51,7 +51,7 @@ def classify_with_ts(instance, hmm_models, interval=10000, freq=None, fall_seg_t
     """
     try:
         peak_mag = np.linalg.norm(hmm_correct.mat_to_peak(np.matrix(instance)[:, 1:4]))
-        if peak_mag < 2200:
+        if peak_mag < 2500:
             return 0
 
         # freq_inv is the interval between two consecutive timestamps, in milliseconds

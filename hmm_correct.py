@@ -191,7 +191,8 @@ def threshold_model_evaluator(samples, test_samples=None, pos_model_indices=None
         return np.mean(spec), np.mean(sens)
 
 
-def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fold=0, n_states=3, generalized=False, verbose=False, spec_sens=True):
+def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fold=0, n_states=3, generalized=False,
+                        verbose=False, spec_sens=True, farseeing=False):
     """
 
     :param samples: (preprocessed) a list of k lists, each list corresponding to the samples for a hmm model,
@@ -238,12 +239,12 @@ def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fo
         # file = open('c:/hmm_models.pkl', 'wb')
         # pickle.dump(hmm_models, file, protocol=3)
         # file.close()
-
         hmm_index = -1
         true_tags = []
         test_tags = []
         type_dict = {0: 0, 1: 0}
         hit_dict = {0: 0, 1: 0}
+        print("farseeing")
         for samples_for_a_hmm in test_set:
             hmm_index += 1
             for time_series in samples_for_a_hmm:
@@ -253,7 +254,9 @@ def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fo
                     true_tags.append(hmm_index)
                     test_tags.append(eval_index)
                 elif generalized == False:
-                    if hmm_index in pos_model_indices:
+                    if farseeing == True:
+                        true_tags.append(hmm_index)
+                    elif hmm_index in pos_model_indices:
                         true_tags.append(1)
                     else:
                         true_tags.append(0)
@@ -262,7 +265,9 @@ def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fo
                     else:
                         test_tags.append(0)
                 elif generalized == True:
-                    if hmm_index in pos_model_indices:
+                    if farseeing == True:
+                        true_tags.append(hmm_index)
+                    elif hmm_index in pos_model_indices:
                         true_tags.append(1)
                     else:
                         true_tags.append(0)
@@ -270,11 +275,12 @@ def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fo
 
         # print(true_tags)
         # print(test_tags)
-
+        print("farseeing1")
         for i in range(len(true_tags)):
             dict_inc(type_dict, true_tags[i])
             if true_tags[i] == test_tags[i]:
                 dict_inc(hit_dict, true_tags[i])
+
 
         return_list = []
         if spec_sens:
@@ -285,8 +291,11 @@ def hmm_model_evaluator(samples, test_samples=None, pos_model_indices=None, n_fo
                     print(type_dict)
                 return_list.append(hit_dict[key])
         else: # use precision and recall
+            # print(type_dict)
+            # print(hit_dict)
             return_list = [hit_dict[1] / (hit_dict[1] + type_dict[0] - hit_dict[0]), hit_dict[1] / type_dict[1]]
 
+        print("farseeing2")
         return return_list
     else: # k-fold cross-validation
         n_fold_indices = gen_n_fold_indices(samples, n_fold)
@@ -335,6 +344,8 @@ def load_samples_from_db(cur=None, sensor_id=None):
     :param sensor_id:
     :return: a list of non_lists, fall_lists
     """
+
+
     non_lists = []
     fall_lists = []
 
@@ -357,11 +368,18 @@ def load_samples_from_db(cur=None, sensor_id=None):
         fall_lists.append([])
         for j in range(1, 6):
             for k in range(start, end):
+                extended = True
+                arg_dict["db_name"] = "test_data_fall_1_re"
                 arg_dict["sensor_id"] = k
                 arg_dict["label_id"] = i
                 arg_dict["subject_id"] = j
                 sample = utilities.read_data_from_db(cur, **arg_dict)
-                sample = feature_gen.sample_around_peak(np.matrix(sample), 25, 25)
+                sample = feature_gen.sample_around_peak(np.matrix(sample), 25, 25).tolist()
+                sample2 = []
+                if extended:
+                    arg_dict["db_name"] = "test_data_fall_1b"
+                    sample2 = utilities.read_data_from_db(cur, **arg_dict)
+                    sample2 = feature_gen.sample_around_peak(np.matrix(sample2), 25, 25).tolist()
 
                 # sample is a 2-D list
 
@@ -370,7 +388,7 @@ def load_samples_from_db(cur=None, sensor_id=None):
                 # if arg_dict["label_id"] <= 3:
                 #     sample = sample[:-60]
                 # adding_sample = sample[start_indices[index] - 2 :]
-                adding_sample = sample
+                adding_sample = sample + sample2
                 if len(adding_sample) != 0:
                     fall_lists[i-1].append(adding_sample)
             # index += 1
@@ -390,14 +408,21 @@ def load_samples_from_db(cur=None, sensor_id=None):
         non_lists.append([])
         for j in range(1, 6):
             for k in range(start, end):
+                extended = False
+                arg_dict2["db_name"] = "test_data_stage_1"
                 arg_dict2["sensor_id"] = k
                 arg_dict2["label_id"] = i
                 arg_dict2["subject_id"] = j
                 sample = utilities.read_data_from_db(cur, **arg_dict2)
+                sample2 = []
+                if extended:
+                    arg_dict2["db_name"] = "test_data_stage_1b"
+                    sample2 = utilities.read_data_from_db(cur, **arg_dict2)
                 # sample = utilities.mat_to_g(sample).tolist()
                 # sample = discretize(sample)
-                if len(sample) != 0:
-                    non_lists[i-1].append(sample)
+                adding_sample = sample + sample2
+                if len(adding_sample) != 0:
+                    non_lists[i-1].append(adding_sample)
 
     return non_lists, fall_lists
 
@@ -421,6 +446,7 @@ def load_fall_samples_from_farseeing(cur, interval=5000):
         '''.format(sub, sub_ts_dict[sub], interval)
         cur.execute(sql)
         for row in cur:
+            # ret_list[counter].append([int(row[1]), int(row[2]), int(row[3])])
             ret_list[counter].append([int(row[0]), int(row[1]), int(row[2]), int(row[3])])
         counter += 1
 
@@ -456,6 +482,7 @@ def load_non_samples_from_farseeing(cur, interval=5000, before_after=60000):
             cur.execute(sql)
             for row in cur:
                 ret_list[counter].append([int(row[0]), int(row[1]), int(row[2]), int(row[3])])
+                # ret_list[counter].append([int(row[1]), int(row[2]), int(row[3])])
             counter += 1
             # if counter % 100 == 0:
             #     print(counter)
@@ -470,8 +497,8 @@ if __name__ == '__main__':
 
     do_pos_5 = True
     do_pos_1 = False
-    spec_sens = True
-    root = 'c:/_test_space/hmm_fall_detection_double_check/'
+    spec_sens = False
+    root = 'c:/_test_space/hmm_fall_detection_farseeing/'
 
     # non_lists, fall_lists = load_samples_from_db()
     #
@@ -486,21 +513,25 @@ if __name__ == '__main__':
 
     if do_pos_5:
         non_lists, fall_lists = load_samples_from_db(cur)
+        non_farseeing = load_non_samples_from_farseeing(cur, interval=500, before_after=60000)
+        fall_farseeing = load_fall_samples_from_farseeing(cur, interval=500)
+
         outputs = [open(root + 'pos_5_sep.txt', 'a'), open(root + 'pos_5_gen.txt', 'a')]
 
         for m in range(3): # three metrics
             prep_lists = sample_preprocessor(non_lists + fall_lists, use_metrics[m])
+            prep_farseeing = sample_preprocessor([non_farseeing] + [fall_farseeing], use_metrics[m])
             print('Sample preprocessed')
             for y in range(2): # not generalized & generalized
                 for n in range(3, max_n_states): # number of hidden states for HMM
                     accs = [0] * 2
                     stds = [0] * 2
                     for p in range(n_loops):
-                        results = hmm_model_evaluator(prep_lists, pos_model_indices=pos_model_indices, n_states=n,
-                                                      generalized=is_gen[y], n_fold=10, spec_sens=spec_sens)
+                        results = hmm_model_evaluator(prep_lists, prep_farseeing, pos_model_indices=pos_model_indices, n_states=n,
+                                                      generalized=is_gen[y], n_fold=0, spec_sens=spec_sens, farseeing=True)
                         outputs[y].write('  >> {}, {}\n'.format(*results))
                         for q in range(len(results)):
-                            accs[q] += np.sum(results[q])
+                            accs[q] += np.mean(results[q])
                             stds[q] += np.std(results[q])
                     for q in range(len(results)):
                         accs[q] /= n_loops

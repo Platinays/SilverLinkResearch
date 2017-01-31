@@ -20,10 +20,10 @@ def hmm_build(samples, n_states):
 
 if __name__ == '__main__':
     cur = utilities.db_connect()
-    n_states = 6
+    n_states = 4
     non_lists, fall_lists = hmm_correct.load_samples_from_db(cur)
     prep_lists = hmm_correct.sample_preprocessor(non_lists + fall_lists, hmm_correct.mat_to_vc)
     hmm_models = hmm_build(prep_lists, n_states)
-    file = open('c:/hmm_models.pkl', 'wb')
+    file = open('c:/hmm_models_4.pkl', 'wb')
     pickle.dump(hmm_models, file, protocol=3)
     file.close()

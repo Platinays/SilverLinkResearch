@@ -15,28 +15,25 @@ def db_connect():
 
 
 dict_name_id = {
-    'null': 0,
-    '1': 6,
-    '2': 7,
-    '2b': 107,
+
 }
 
 def db_write(cur, ins):
     sql = '''
-        INSERT INTO test_data_stage_3 (sensor_id, subject_id, label_id, freq, timestamp, x_accel, y_accel, z_accel)
+        INSERT INTO test_data_stage_1b (sensor_id, subject_id, label_id, freq, timestamp, x_accel, y_accel, z_accel)
         VALUES ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
         '''
 
     # 1457307771365,null,0,E8BD107D58B4,25.0,-119,163,990
     # print(ins)
     sensor_id = ins[3]
-    subject_id = dict_name_id[ins[1]]
+    subject_id = ins[1][-1:]
     # subject_id = int(ins[1])
     label_id = int(ins[2])
-    if label_id == 6 and (subject_id == 2 or subject_id == 4):
-        return
-    elif label_id == 7:
-        label_id == 6
+    # if label_id == 6 and (subject_id == 2 or subject_id == 4):
+    #     return
+    # elif label_id == 7:
+    #     label_id == 6
     freq = ins[4]
     timestamp = int(ins[0])
     x_accel = ins[5]
@@ -125,4 +122,5 @@ def matlab_to_db(pattern, cur):
 
 if __name__ == '__main__':
     cur = db_connect()
-    matlab_to_db('C:/_test_space/Fall examples/Signal files/*.mat', cur)
+    # matlab_to_db('C:/_test_space/Fall examples/Signal files/*.mat', cur)
+    csv_to_db('C:/_test_space/new_samples_0115/2017-1-15_21_15_20.csv', cur)

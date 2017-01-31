@@ -1,11 +1,10 @@
 __author__ = 'Shuo Yu'
 
-import numpy as np
 import math
-from dtw import dtw
+# from dtw import dtw
 from utilities import *
-from calc_step_energy import moving_average
-from calc_step_energy import mean_crossing_rate
+# from calc_step_energy import moving_average
+# from calc_step_energy import mean_crossing_rate
 
 
 def mag(num_list):
