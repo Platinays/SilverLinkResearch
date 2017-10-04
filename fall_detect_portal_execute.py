@@ -5,7 +5,7 @@ import hmm_correct
 import utilities
 import numpy as np
 
-hmm_model_path = 'hmm_models.pkl'
+hmm_model_path = 'hmm_models_4.pkl'
 try:
     with open(hmm_model_path, 'rb') as hmm_file:
         hmm_models = pickle.load(hmm_file)
@@ -30,7 +30,11 @@ def classify(instance, hmm_models, n=8):
     elif len(instance_0) == 4: # with timestamp
         converted_instance = hmm_correct.mat_to_vc(np.matrix(instance)[:, 1:4])
     index = hmm_correct.hmm_classifier(hmm_models, converted_instance)
-    return 0 if index < n else 1
+    if index < n:
+        return 0
+    else:
+        print(np.matrix(instance)[:, :4])
+        return 1
 
 
 def classify_with_ts(instance, hmm_models, interval=1000, freq=None, fall_seg_thres=1, n=8):
@@ -51,8 +55,8 @@ def classify_with_ts(instance, hmm_models, interval=1000, freq=None, fall_seg_th
     """
     try:
         peak_mag = np.linalg.norm(hmm_correct.mat_to_peak(np.matrix(instance)[:, 1:4]))
-        if peak_mag < 2500:
-            return 0
+        # if peak_mag < 2500:
+        #     return 0
 
         # freq_inv is the interval between two consecutive timestamps, in milliseconds
         if freq is None:
